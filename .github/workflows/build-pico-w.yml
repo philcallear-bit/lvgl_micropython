@@ -20,7 +20,7 @@ jobs:
 
       - name: Run Build
         run: |
-          python3 make.py rp2 BOARD=RPI_PICO_W DISPLAY=ili9341 INDEV=xpt2046
+          python3 make.py rp2 BOARD=RPI_PICO_W
 
       - name: Upload UF2 Artifact
         uses: actions/upload-artifact@v4
