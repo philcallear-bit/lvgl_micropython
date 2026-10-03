@@ -26,18 +26,23 @@ jobs:
           import re
           with open('make.py', 'r') as f:
               s = f.read()
-          # Add comma between 'rp2' and 'renesas-ra' regardless of whitespace/newlines
           s = re.sub(r'([\"\']rp2[\"\'])\s+([\"\']renesas-ra[\"\'])', r'\1, \2', s)
           with open('make.py', 'w') as f:
               f.write(s)
           "
-          # Verify make.py now recognizes rp2 as a valid target
           python3 make.py --help
 
       - name: Install ARM Toolchain and Dependencies
         run: |
           sudo apt-get update
           sudo apt-get install -y gcc-arm-none-eabi libnewlib-arm-none-eabi build-essential cmake ninja-build python3
+
+      - name: Precompile mpy-cross
+        run: |
+          # Build host mpy-cross cleanly so CMake doesn't choke on frozen qstr linking
+          cd lib/micropython/mpy-cross
+          make clean
+          make -j$(nproc)
 
       - name: Run Build
         run: |
@@ -47,4 +52,6 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: pico-w-lvgl9-firmware
-          path: build/*.uf2
+          path: |
+            build/*.uf2
+            lib/micropython/ports/rp2/build*/**/*.uf2
