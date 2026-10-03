@@ -40,8 +40,10 @@ jobs:
               code = f.read()
           # Fix 1: undeclared 'io' identifier
           code = code.replace('return io->tx_param(io, lcd_cmd, param, param_size);', 'return self->panel_io_handle.tx_param(obj, lcd_cmd, param, param_size);')
-          # Fix 2: invalid 'int' keyword inside the tx_color call
-          code = code.replace('int x_start, int y_start, int x_end, int y_end', 'x_start, y_start, x_end, y_end')
+          # Fix 2: fix only the function CALL line without altering the function declaration header
+          bad_call = 'return self->panel_io_handle.tx_color(obj, lcd_cmd, color, color_size, int x_start, int y_start, int x_end, int y_end);'
+          good_call = 'return self->panel_io_handle.tx_color(obj, lcd_cmd, color, color_size, x_start, y_start, x_end, y_end);'
+          code = code.replace(bad_call, good_call)
           with open(p, 'w') as f:
               f.write(code)
           "
