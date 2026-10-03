@@ -22,14 +22,17 @@ jobs:
 
       - name: Fix make.py Syntax Bug
         run: |
-          # Fix the missing comma between 'rp2' and 'renesas-ra' in make.py
           python3 -c "
+          import re
           with open('make.py', 'r') as f:
-              content = f.read()
-          content = content.replace('rp2renesas-ra', \"'rp2', 'renesas-ra'\")
+              s = f.read()
+          # Add comma between 'rp2' and 'renesas-ra' regardless of whitespace/newlines
+          s = re.sub(r'([\"\']rp2[\"\'])\s+([\"\']renesas-ra[\"\'])', r'\1, \2', s)
           with open('make.py', 'w') as f:
-              f.write(content)
+              f.write(s)
           "
+          # Verify make.py now recognizes rp2 as a valid target
+          python3 make.py --help
 
       - name: Install ARM Toolchain and Dependencies
         run: |
