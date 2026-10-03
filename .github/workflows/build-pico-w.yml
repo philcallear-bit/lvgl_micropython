@@ -32,6 +32,20 @@ jobs:
           "
           python3 make.py --help
 
+      - name: Fix lcd_types.c Syntax Errors
+        run: |
+          python3 -c "
+          p = 'ext_mod/lcd_bus/lcd_types.c'
+          with open(p, 'r') as f:
+              code = f.read()
+          # Fix 1: undeclared 'io' identifier
+          code = code.replace('return io->tx_param(io, lcd_cmd, param, param_size);', 'return self->panel_io_handle.tx_param(obj, lcd_cmd, param, param_size);')
+          # Fix 2: invalid 'int' keyword inside the tx_color call
+          code = code.replace('int x_start, int y_start, int x_end, int y_end', 'x_start, y_start, x_end, y_end')
+          with open(p, 'w') as f:
+              f.write(code)
+          "
+
       - name: Install ARM Toolchain and Dependencies
         run: |
           sudo apt-get update
@@ -39,7 +53,6 @@ jobs:
 
       - name: Precompile mpy-cross
         run: |
-          # Build host mpy-cross cleanly so CMake doesn't choke on frozen qstr linking
           cd lib/micropython/mpy-cross
           make clean
           make -j$(nproc)
