@@ -1,0 +1,29 @@
+name: Build Pico W LVGL v9
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install ARM Toolchain and Dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gcc-arm-none-eabi libnewlib-arm-none-eabi build-essential cmake ninja-build python3
+
+      - name: Run Build
+        run: |
+          python3 make.py rp2 BOARD=RPI_PICO_W DISPLAY=ili9341 INDEV=xpt2046
+
+      - name: Upload UF2 Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: pico-w-lvgl9-firmware
+          path: build/*.uf2
