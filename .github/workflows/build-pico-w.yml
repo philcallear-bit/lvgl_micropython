@@ -38,9 +38,7 @@ jobs:
           p = 'ext_mod/lcd_bus/lcd_types.c'
           with open(p, 'r') as f:
               code = f.read()
-          # Fix 1: undeclared 'io' identifier
           code = code.replace('return io->tx_param(io, lcd_cmd, param, param_size);', 'return self->panel_io_handle.tx_param(obj, lcd_cmd, param, param_size);')
-          # Fix 2: fix only the function CALL line without altering the function declaration header
           bad_call = 'return self->panel_io_handle.tx_color(obj, lcd_cmd, color, color_size, int x_start, int y_start, int x_end, int y_end);'
           good_call = 'return self->panel_io_handle.tx_color(obj, lcd_cmd, color, color_size, x_start, y_start, x_end, y_end);'
           code = code.replace(bad_call, good_call)
@@ -58,6 +56,21 @@ jobs:
           cd lib/micropython/mpy-cross
           make clean
           make -j$(nproc)
+
+      - name: Configure LVGL Memory Pool
+        run: |
+          python3 -c "
+          import os, glob, re
+          for p in set(glob.glob('**/lv_conf.h', recursive=True)):
+              if os.path.isfile(p):
+                  with open(p, 'r') as f:
+                      txt = f.read()
+                  txt = re.sub(r'#define\s+LV_MEM_CUSTOM\s+1', '#define LV_MEM_CUSTOM 0', txt)
+                  txt = re.sub(r'#define\s+LV_MEM_SIZE\s+.*', '#define LV_MEM_SIZE (32 * 1024U)', txt)
+                  with open(p, 'w') as f:
+                      f.write(txt)
+                  print(f'Patched {p}')
+          "
 
       - name: Run Build
         run: |
