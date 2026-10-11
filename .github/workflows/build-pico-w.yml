@@ -59,30 +59,7 @@ jobs:
 
       - name: Configure LVGL Memory Pool
         run: |
-          python3 -c "
-          import os, glob, re
-
-          # 1. Patch every lv_conf*.h file
-          for p in set(glob.glob('**/*lv_conf*.h', recursive=True)):
-              if os.path.isfile(p):
-                  with open(p, 'r') as f:
-                      txt = f.read()
-                  txt = re.sub(r'#\s*define\s+LV_MEM_CUSTOM\s+1', '#define LV_MEM_CUSTOM 0', txt)
-                  txt = re.sub(r'#\s*define\s+LV_MEM_SIZE\s+.*', '#define LV_MEM_SIZE (36 * 1024U)', txt)
-                  with open(p, 'w') as f:
-                      f.write(txt)
-                  print(f'Patched header: {p}')
-
-          # 2. Force definitions at the top of mpconfigport.h for the rp2 port
-          port_cfg = 'lib/micropython/ports/rp2/mpconfigport.h'
-          if os.path.isfile(port_cfg):
-              with open(port_cfg, 'r') as f:
-                  content = f.read()
-              injection = '\n#undef LV_MEM_CUSTOM\n#define LV_MEM_CUSTOM 0\n#undef LV_MEM_SIZE\n#define LV_MEM_SIZE (36 * 1024U)\n'
-              with open(port_cfg, 'w') as f:
-                  f.write(injection + content)
-              print(f'Injected memory overrides into {port_cfg}')
-          "
+          echo "Using standard MicroPython GC memory management (LV_MEM_CUSTOM 1)"
 
       - name: Run Build
         run: |
