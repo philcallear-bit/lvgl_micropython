@@ -98,7 +98,7 @@ jobs:
 
       - name: Run Build
         run: |
-          python3 make.py rp2 BOARD=RPI_PICO_W
+          python3 make.py rp2 --board=RPI_PICO_W
 
       - name: Upload UF2 Artifact
         uses: actions/upload-artifact@v4
