@@ -98,7 +98,7 @@ jobs:
 
       - name: Run Build
         run: |
-          python3 make.py rp2 BOARD=RPI_PICO_W
+          python3 make.py rp2 BOARD=RPI_PICO_W CFLAGS_EXTRA="-DLV_MEM_CUSTOM=0 -DLV_MEM_SIZE=36864"
 
       - name: Upload UF2 Artifact
         uses: actions/upload-artifact@v4
