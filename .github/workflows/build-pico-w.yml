@@ -61,15 +61,39 @@ jobs:
         run: |
           python3 -c "
           import os, glob, re
-          for p in set(glob.glob('**/lv_conf.h', recursive=True)):
+
+          # 1. Patch every lv_conf*.h file anywhere in the repo
+          for p in set(glob.glob('**/*lv_conf*.h', recursive=True)):
               if os.path.isfile(p):
                   with open(p, 'r') as f:
                       txt = f.read()
-                  txt = re.sub(r'#define\s+LV_MEM_CUSTOM\s+1', '#define LV_MEM_CUSTOM 0', txt)
-                  txt = re.sub(r'#define\s+LV_MEM_SIZE\s+.*', '#define LV_MEM_SIZE (32 * 1024U)', txt)
+                  txt = re.sub(r'#\s*define\s+LV_MEM_CUSTOM\s+1', '#define LV_MEM_CUSTOM 0', txt)
+                  txt = re.sub(r'#\s*define\s+LV_MEM_SIZE\s+.*', '#define LV_MEM_SIZE (32 * 1024U)', txt)
                   with open(p, 'w') as f:
                       f.write(txt)
-                  print(f'Patched {p}')
+                  print(f'Patched header: {p}')
+
+          # 2. Patch CMakeLists.txt and cmake files that pass -DLV_MEM_CUSTOM=1
+          for p in set(glob.glob('**/*.cmake', recursive=True) + glob.glob('**/CMakeLists.txt', recursive=True)):
+              if os.path.isfile(p):
+                  with open(p, 'r') as f:
+                      txt = f.read()
+                  if 'LV_MEM_CUSTOM' in txt:
+                      txt = re.sub(r'-DLV_MEM_CUSTOM=1', '-DLV_MEM_CUSTOM=0', txt)
+                      txt = re.sub(r'LV_MEM_CUSTOM\s+1', 'LV_MEM_CUSTOM 0', txt)
+                      with open(p, 'w') as f:
+                          f.write(txt)
+                      print(f'Patched cmake: {p}')
+
+          # 3. Patch make.py if it defines or overrides LV_MEM_CUSTOM
+          if os.path.isfile('make.py'):
+              with open('make.py', 'r') as f:
+                  txt = f.read()
+              if 'LV_MEM_CUSTOM' in txt:
+                  txt = re.sub(r'LV_MEM_CUSTOM=1', 'LV_MEM_CUSTOM=0', txt)
+                  with open('make.py', 'w') as f:
+                      f.write(txt)
+                  print('Patched make.py')
           "
 
       - name: Run Build
