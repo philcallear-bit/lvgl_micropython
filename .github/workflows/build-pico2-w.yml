@@ -42,12 +42,16 @@ jobs:
           python3 -c "
           p = 'lib/micropython/ports/rp2/CMakeLists.txt'
           with open(p, 'r') as f:
-              s = f.read()
-          # Remove obsolete assembly float file references not present in Pico SDK 2.x
-          s = s.replace('\${PICO_SDK_PATH}/src/rp2_common/pico_float/float_aeabi.S', '')
-          s = s.replace('\${PICO_SDK_PATH}/src/rp2_common/pico_double/double_aeabi.S', '')
+              lines = f.readlines()
+          new_lines = []
+          for line in lines:
+              # Filter out all obsolete individual float/double source file references
+              if any(k in line for k in ['float_aeabi.S', 'float_init_rom.c', 'float_math.c', 'float_v1_rom_shim.S',
+                                         'double_aeabi.S', 'double_init_rom.c', 'double_math.c', 'double_v1_rom_shim.S']):
+                  continue
+              new_lines.append(line)
           with open(p, 'w') as f:
-              f.write(s)
+              f.writelines(new_lines)
           "
 
       - name: Fix make.py Syntax Bug
@@ -58,7 +62,7 @@ jobs:
               s = f.read()
           s = re.sub(r'([\"\']rp2[\"\'])\s+([\"\']renesas-ra[\"\'])', r'\1, \2', s)
           with open('make.py', 'w') as f:
-              f.write(s)
+              s.write(s)
           "
           python3 make.py --help
 
