@@ -97,8 +97,7 @@ jobs:
 
       - name: Run Build
         run: |
-          # Pass -j2 directly to make so parallel compilation stays bounded and doesn't deadlock stdin
-          python3 make.py rp2 BOARD=RPI_PICO2_W -- -j2
+          python3 make.py rp2 BOARD=RPI_PICO2_W 
 
       - name: Upload UF2 Artifact
         uses: actions/upload-artifact@v4
