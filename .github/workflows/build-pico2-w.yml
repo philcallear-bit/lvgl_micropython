@@ -82,10 +82,18 @@ jobs:
           EOF
           python3 patch_lcd.py
 
-      - name: Install ARM Toolchain and Precompiled Host Tools
+      - name: Install Toolchain and Build Dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y gcc-arm-none-eabi libnewlib-arm-none-eabi build-essential cmake ninja-build python3 libusb-1.0-0-dev picotool
+          sudo apt-get install -y gcc-arm-none-eabi libnewlib-arm-none-eabi build-essential cmake ninja-build python3 libusb-1.0-0-dev
+
+      - name: Build and Install Host Picotool
+        run: |
+          git clone --depth 1 --branch 2.1.0 https://github.com/raspberrypi/picotool.git /tmp/picotool
+          cmake -B /tmp/picotool/build -S /tmp/picotool -DPICO_SDK_PATH=$PWD/lib/micropython/lib/pico-sdk
+          cmake --build /tmp/picotool/build -j$(nproc)
+          sudo cmake --install /tmp/picotool/build
+          picotool version
 
       - name: Precompile mpy-cross
         run: |
