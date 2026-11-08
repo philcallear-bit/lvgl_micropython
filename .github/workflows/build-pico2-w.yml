@@ -14,28 +14,38 @@ jobs:
           fetch-depth: 0
           submodules: recursive
 
-      - name: Checkout Stable MicroPython with Pico 2 W Support
+      - name: Revert to Stable RP2 Commit
         run: |
-          cd lib/micropython
-          git fetch --tags
-          git checkout v1.24.1
-          git submodule update --init --recursive
-          cd ../..
+          git checkout $(git rev-list -n 1 --before="2024-04-01" main)
           git submodule sync --recursive
           git submodule update --init --recursive
-          
+
+      - name: Upgrade Pico SDK to 2.1.0 for RP2350 Support
+        run: |
+          cd lib/micropython/lib/pico-sdk
+          git fetch --tags
+          git checkout 2.1.0
+          git submodule update --init --recursive
+          cd ../../../..
+
+      - name: Fetch Official RPI_PICO2_W Board Definition
+        run: |
+          mkdir -p lib/micropython/ports/rp2/boards/RPI_PICO2_W
+          cd lib/micropython/ports/rp2/boards/RPI_PICO2_W
+          curl -sSL -O https://raw.githubusercontent.com/micropython/micropython/master/ports/rp2/boards/RPI_PICO2_W/mpconfigboard.h
+          curl -sSL -O https://raw.githubusercontent.com/micropython/micropython/master/ports/rp2/boards/RPI_PICO2_W/mpconfigboard.cmake
+          curl -sSL -O https://raw.githubusercontent.com/micropython/micropython/master/ports/rp2/boards/RPI_PICO2_W/pins.csv
+          cd ../../../../../
+
       - name: Fix make.py Syntax Bug
         run: |
           python3 -c "
           import re
-          try:
-              with open('make.py', 'r') as f:
-                  s = f.read()
-              s = re.sub(r'([\"\']rp2[\"\'])\s+([\"\']renesas-ra[\"\'])', r'\1, \2', s)
-              with open('make.py', 'w') as f:
-                  f.write(s)
-          except Exception as e:
-              print(e)
+          with open('make.py', 'r') as f:
+              s = f.read()
+          s = re.sub(r'([\"\']rp2[\"\'])\s+([\"\']renesas-ra[\"\'])', r'\1, \2', s)
+          with open('make.py', 'w') as f:
+              f.write(s)
           "
           python3 make.py --help
 
@@ -43,17 +53,14 @@ jobs:
         run: |
           python3 -c "
           p = 'ext_mod/lcd_bus/lcd_types.c'
-          try:
-              with open(p, 'r') as f:
-                  code = f.read()
-              code = code.replace('return io->tx_param(io, lcd_cmd, param, param_size);', 'return self->panel_io_handle.tx_param(obj, lcd_cmd, param, param_size);')
-              bad_call = 'return self->panel_io_handle.tx_color(obj, lcd_cmd, color, color_size, int x_start, int y_start, int x_end, int y_end);'
-              good_call = 'return self->panel_io_handle.tx_color(obj, lcd_cmd, color, color_size, x_start, y_start, x_end, y_end);'
-              code = code.replace(bad_call, good_call)
-              with open(p, 'w') as f:
-                  f.write(code)
-          except Exception as e:
-              print(e)
+          with open(p, 'r') as f:
+              code = f.read()
+          code = code.replace('return io->tx_param(io, lcd_cmd, param, param_size);', 'return self->panel_io_handle.tx_param(obj, lcd_cmd, param, param_size);')
+          bad_call = 'return self->panel_io_handle.tx_color(obj, lcd_cmd, color, color_size, int x_start, int y_start, int x_end, int y_end);'
+          good_call = 'return self->panel_io_handle.tx_color(obj, lcd_cmd, color, color_size, x_start, y_start, x_end, y_end);'
+          code = code.replace(bad_call, good_call)
+          with open(p, 'w') as f:
+              f.write(code)
           "
 
       - name: Install ARM Toolchain and Dependencies
