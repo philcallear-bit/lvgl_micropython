@@ -62,7 +62,7 @@ jobs:
               s = f.read()
           s = re.sub(r'([\"\']rp2[\"\'])\s+([\"\']renesas-ra[\"\'])', r'\1, \2', s)
           with open('make.py', 'w') as f:
-              s.write(s)
+              f.write(s)
           "
           python3 make.py --help
 
