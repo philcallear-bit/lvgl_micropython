@@ -1,5 +1,4 @@
-
-name: Build Pico W LVGL v9
+name: Build Pico 2 W LVGL v9
 
 on:
   workflow_dispatch:
@@ -15,9 +14,8 @@ jobs:
           fetch-depth: 0
           submodules: recursive
 
-      - name: Revert to Stable RP2 Commit
+      - name: Update Submodules to Latest
         run: |
-          git checkout $(git rev-list -n 1 --before="2024-04-01" main)
           git submodule sync --recursive
           git submodule update --init --recursive
 
@@ -25,11 +23,14 @@ jobs:
         run: |
           python3 -c "
           import re
-          with open('make.py', 'r') as f:
-              s = f.read()
-          s = re.sub(r'([\"\']rp2[\"\'])\s+([\"\']renesas-ra[\"\'])', r'\1, \2', s)
-          with open('make.py', 'w') as f:
-              f.write(s)
+          try:
+              with open('make.py', 'r') as f:
+                  s = f.read()
+              s = re.sub(r'([\"\']rp2[\"\'])\s+([\"\']renesas-ra[\"\'])', r'\1, \2', s)
+              with open('make.py', 'w') as f:
+                  f.write(s)
+          except Exception as e:
+              print(e)
           "
           python3 make.py --help
 
@@ -37,14 +38,17 @@ jobs:
         run: |
           python3 -c "
           p = 'ext_mod/lcd_bus/lcd_types.c'
-          with open(p, 'r') as f:
-              code = f.read()
-          code = code.replace('return io->tx_param(io, lcd_cmd, param, param_size);', 'return self->panel_io_handle.tx_param(obj, lcd_cmd, param, param_size);')
-          bad_call = 'return self->panel_io_handle.tx_color(obj, lcd_cmd, color, color_size, int x_start, int y_start, int x_end, int y_end);'
-          good_call = 'return self->panel_io_handle.tx_color(obj, lcd_cmd, color, color_size, x_start, y_start, x_end, y_end);'
-          code = code.replace(bad_call, good_call)
-          with open(p, 'w') as f:
-              f.write(code)
+          try:
+              with open(p, 'r') as f:
+                  code = f.read()
+              code = code.replace('return io->tx_param(io, lcd_cmd, param, param_size);', 'return self->panel_io_handle.tx_param(obj, lcd_cmd, param, param_size);')
+              bad_call = 'return self->panel_io_handle.tx_color(obj, lcd_cmd, color, color_size, int x_start, int y_start, int x_end, int y_end);'
+              good_call = 'return self->panel_io_handle.tx_color(obj, lcd_cmd, color, color_size, x_start, y_start, x_end, y_end);'
+              code = code.replace(bad_call, good_call)
+              with open(p, 'w') as f:
+                  f.write(code)
+          except Exception as e:
+              print(e)
           "
 
       - name: Install ARM Toolchain and Dependencies
@@ -69,7 +73,7 @@ jobs:
       - name: Upload UF2 Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: pico-w-lvgl9-firmware
+          name: pico2-w-lvgl9-firmware
           path: |
-            build/*.uf2
+            build*/**/*.uf2
             lib/micropython/ports/rp2/build*/**/*.uf2
