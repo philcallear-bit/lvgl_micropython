@@ -60,7 +60,7 @@ jobs:
           import re
           with open('make.py', 'r') as f:
               s = f.read()
-          s = re.sub(r'([\"\']rp2[\"\'])\s+([\"\']renesas-ra[\"\'])', r'\1, \2', s)
+          s = re.sub(r'([\"\']rp2[\\"\'])\s+([\"\']renesas-ra[\"\'])', r'\1, \2', s)
           with open('make.py', 'w') as f:
               f.write(s)
           "
@@ -80,10 +80,10 @@ jobs:
               f.write(code)
           "
 
-      - name: Install ARM Toolchain and Dependencies
+      - name: Install ARM Toolchain and Precompiled Host Tools
         run: |
           sudo apt-get update
-          sudo apt-get install -y gcc-arm-none-eabi libnewlib-arm-none-eabi build-essential cmake ninja-build python3 libusb-1.0-0-dev
+          sudo apt-get install -y gcc-arm-none-eabi libnewlib-arm-none-eabi build-essential cmake ninja-build python3 libusb-1.0-0-dev picotool
 
       - name: Precompile mpy-cross
         run: |
@@ -96,8 +96,10 @@ jobs:
           echo "Using standard MicroPython GC memory management (LV_MEM_CUSTOM 1)"
 
       - name: Run Build
+        env:
+          PICO_SDK_PICOTOOL_PRECOMPILED: "1"
         run: |
-          python3 make.py rp2 BOARD=RPI_PICO2_W 
+          python3 make.py rp2 BOARD=RPI_PICO2_W
 
       - name: Upload UF2 Artifact
         uses: actions/upload-artifact@v4
