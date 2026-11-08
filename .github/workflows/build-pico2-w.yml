@@ -45,7 +45,7 @@ jobs:
               lines = f.readlines()
           new_lines = []
           for line in lines:
-              # Filter out all obsolete individual float/double source file references
+              # Filter out obsolete float/double assembly/shim source references
               if any(k in line for k in ['float_aeabi.S', 'float_init_rom.c', 'float_math.c', 'float_v1_rom_shim.S',
                                          'double_aeabi.S', 'double_init_rom.c', 'double_math.c', 'double_v1_rom_shim.S']):
                   continue
@@ -97,7 +97,8 @@ jobs:
 
       - name: Run Build
         run: |
-          python3 make.py rp2 BOARD=RPI_PICO2_W
+          # Pass -j2 directly to make so parallel compilation stays bounded and doesn't deadlock stdin
+          python3 make.py rp2 BOARD=RPI_PICO2_W -- -j2
 
       - name: Upload UF2 Artifact
         uses: actions/upload-artifact@v4
