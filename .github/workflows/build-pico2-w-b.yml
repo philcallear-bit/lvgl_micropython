@@ -41,12 +41,21 @@ jobs:
           fi
           git submodule update --init --recursive || true
           cd ../../../..
-
       - name: Install Toolchain and Build Dependencies
+        env:
+          DEBIAN_FRONTEND: noninteractive
         run: |
           sudo apt-get update
-          sudo apt-get install -y gcc-arm-none-eabi libnewlib-arm-none-eabi build-essential cmake ninja-build python3 libusb-1.0-0-dev python3-pycparser
-
+          sudo -E apt-get install -y --no-install-recommends \
+            gcc-arm-none-eabi \
+            libnewlib-arm-none-eabi \
+            build-essential \
+            cmake \
+            ninja-build \
+            python3 \
+            libusb-1.0-0-dev \
+            python3-pycparser
+            
       - name: Build and Install Host SDK Tools (picotool & pioasm)
         run: |
           git clone --depth 1 --branch 2.1.0 https://github.com/raspberrypi/picotool.git /tmp/picotool
