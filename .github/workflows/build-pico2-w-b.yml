@@ -14,11 +14,15 @@ jobs:
           fetch-depth: 0
           submodules: recursive
 
-      - name: Revert to Stable RP2 Commit
+      - name: Update MicroPython to RP2350-Aware Commit
         run: |
-          git checkout $(git rev-list -n 1 --before="2024-04-01" main)
+          cd lib/micropython
+          git fetch origin
+          # Checkout v1.24.0 or a stable late-2024 commit with full SDK 2.x / RP2350 support
+          git checkout v1.24.0 || git checkout master
           git submodule sync --recursive
           git submodule update --init --recursive
+          cd ../..
 
       - name: Upgrade Pico SDK to 2.1.0 for RP2350 Support
         run: |
@@ -27,30 +31,6 @@ jobs:
           git checkout 2.1.0
           git submodule update --init --recursive
           cd ../../../..
-
-      - name: Create Pico SDK 2.x Compatibility Shims
-        run: |
-          SHIM_DIR="lib/micropython/lib/pico-sdk/src/common/pico_base_headers/include/pico/platform"
-          mkdir -p "$SHIM_DIR"
-
-          cat << 'EOF' > "$SHIM_DIR/compiler.h"
-          #pragma once
-          #include "pico/platform.h"
-          EOF
-
-          cat << 'EOF' > "$SHIM_DIR/sections.h"
-          #pragma once
-          #include "pico/platform.h"
-          EOF
-
-      - name: Fetch Official RPI_PICO2_W Board Definition
-        run: |
-          mkdir -p lib/micropython/ports/rp2/boards/RPI_PICO2_W
-          cd lib/micropython/ports/rp2/boards/RPI_PICO2_W
-          curl -sSL -O https://raw.githubusercontent.com/micropython/micropython/master/ports/rp2/boards/RPI_PICO2_W/mpconfigboard.h
-          curl -sSL -O https://raw.githubusercontent.com/micropython/micropython/master/ports/rp2/boards/RPI_PICO2_W/mpconfigboard.cmake
-          curl -sSL -O https://raw.githubusercontent.com/micropython/micropython/master/ports/rp2/boards/RPI_PICO2_W/pins.csv
-          cd ../../../../../
 
       - name: Install Toolchain and Build Dependencies
         run: |
@@ -70,33 +50,20 @@ jobs:
           sudo install -m 755 /tmp/pioasm/build/pioasm /usr/local/bin/pioasm
           which pioasm
 
-      - name: Strip Deprecated Float/Double ROM Shims
-        run: |
-          cat << 'EOF' > patch_cmake.py
-          p = 'lib/micropython/ports/rp2/CMakeLists.txt'
-          with open(p, 'r') as f:
-              lines = f.readlines()
-          new_lines = [l for l in lines if not any(k in l for k in [
-              'float_aeabi.S', 'float_init_rom.c', 'float_math.c', 'float_v1_rom_shim.S',
-              'double_aeabi.S', 'double_init_rom.c', 'double_math.c', 'double_v1_rom_shim.S'
-          ])]
-          with open(p, 'w') as f:
-              f.writelines(new_lines)
-          EOF
-          python3 patch_cmake.py
-
       - name: Fix lcd_types.c Syntax Errors
         run: |
           cat << 'EOF' > patch_lcd.py
+          import os
           p = 'ext_mod/lcd_bus/lcd_types.c'
-          with open(p, 'r') as f:
-              code = f.read()
-          code = code.replace('return io->tx_param(io, lcd_cmd, param, param_size);', 'return self->panel_io_handle.tx_param(obj, lcd_cmd, param, param_size);')
-          bad_call = 'return self->panel_io_handle.tx_color(obj, lcd_cmd, color, color_size, int x_start, int y_start, int x_end, int y_end);'
-          good_call = 'return self->panel_io_handle.tx_color(obj, lcd_cmd, color, color_size, x_start, y_start, x_end, y_end);'
-          code = code.replace(bad_call, good_call)
-          with open(p, 'w') as f:
-              f.write(code)
+          if os.path.exists(p):
+              with open(p, 'r') as f:
+                  code = f.read()
+              code = code.replace('return io->tx_param(io, lcd_cmd, param, param_size);', 'return self->panel_io_handle.tx_param(obj, lcd_cmd, param, param_size);')
+              bad_call = 'return self->panel_io_handle.tx_color(obj, lcd_cmd, color, color_size, int x_start, int y_start, int x_end, int y_end);'
+              good_call = 'return self->panel_io_handle.tx_color(obj, lcd_cmd, color, color_size, x_start, y_start, x_end, y_end);'
+              code = code.replace(bad_call, good_call)
+              with open(p, 'w') as f:
+                  f.write(code)
           EOF
           python3 patch_lcd.py
 
@@ -110,7 +77,6 @@ jobs:
         run: |
           cd lib/micropython/ports/rp2
 
-          # Locate micropython.cmake inside ext_mod
           USER_C_MODS_ARG=""
           if [ -f "$GITHUB_WORKSPACE/ext_mod/micropython.cmake" ]; then
             USER_C_MODS_ARG="-DUSER_C_MODULES=$GITHUB_WORKSPACE/ext_mod/micropython.cmake"
