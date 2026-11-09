@@ -69,29 +69,56 @@ jobs:
       - name: Patch ext_mod/lvgl/micropython.cmake Syntax
         run: |
           cat << 'EOF' > patch_lvgl_cmake.py
-          import os, re
+          import os
 
           cmake_file = 'ext_mod/lvgl/micropython.cmake'
           if os.path.exists(cmake_file):
               with open(cmake_file, 'r') as f:
-                  lines = f.readlines()
+                  code = f.read()
 
-              print("Original line 30 area:")
-              for idx in range(max(0, 25), min(len(lines), 35)):
-                  print(f"{idx+1}: {lines[idx]}", end="")
-
-              new_lines = []
-              for line in lines:
-                  # Fix unquoted ${VAR} EQUAL 0 to "${VAR}" STREQUAL "0"
-                  # Handles: if (${VAR} EQUAL 0) or if(${VAR} EQUAL 0)
-                  fixed = re.sub(r'if\s*\(\s*\$\{([A-Za-z0-9_]+)\}\s+EQUAL\s+([0-9]+)\s*\)', r'if("\${\1}" STREQUAL "\2")', line)
-                  new_lines.append(fixed)
+              code = code.replace(
+                  'if(${SECOND_BUILD_ENV} EQUAL "0")',
+                  'if("${SECOND_BUILD_ENV}" STREQUAL "0")'
+              )
+              code = code.replace(
+                  'if(${SECOND_BUILD_ENV} EQUAL 0)',
+                  'if("${SECOND_BUILD_ENV}" STREQUAL "0")'
+              )
 
               with open(cmake_file, 'w') as f:
-                  f.writelines(new_lines)
-              print("\nPatched ext_mod/lvgl/micropython.cmake successfully.")
+                  f.write(code)
+
+              print("ext_mod/lvgl/micropython.cmake patched successfully.")
           EOF
           python3 patch_lvgl_cmake.py
+
+      - name: Patch Linker Script Macro for Pico SDK 2.x
+        run: |
+          cat << 'EOF' > patch_linker_macro.py
+          import os
+
+          # In Pico SDK 2.x, ensure the linker function is defined if called early
+          rp2_cmake = 'lib/micropython/ports/rp2/CMakeLists.txt'
+          if os.path.exists(rp2_cmake):
+              with open(rp2_cmake, 'r') as f:
+                  content = f.read()
+
+              # Provide fallback macro if pico_add_linker_script_override_path is not yet loaded
+              shim = '''
+          if(NOT COMMAND pico_add_linker_script_override_path)
+              macro(pico_add_linker_script_override_path TARGET PATH)
+                  pico_set_linker_script(${TARGET} ${PATH})
+              endmacro()
+          endif()
+          '''
+              # Inject shim right near top of ports/rp2/CMakeLists.txt
+              if 'pico_add_linker_script_override_path' not in content[:300]:
+                  content = shim + "\n" + content
+                  with open(rp2_cmake, 'w') as f:
+                      f.write(content)
+                  print("Injected pico_add_linker_script_override_path fallback shim.")
+          EOF
+          python3 patch_linker_macro.py
 
       - name: Precompile mpy-cross
         run: |
