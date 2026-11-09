@@ -14,12 +14,11 @@ jobs:
           fetch-depth: 0
           submodules: recursive
 
-      - name: Update MicroPython to RP2350-Aware Commit
+      - name: Update MicroPython to Master for Native RP2350 & Pico 2 W Support
         run: |
           cd lib/micropython
-          git fetch origin
-          # Checkout v1.24.0 or a stable late-2024 commit with full SDK 2.x / RP2350 support
-          git checkout v1.24.0 || git checkout master
+          git fetch origin master
+          git checkout origin/master
           git submodule sync --recursive
           git submodule update --init --recursive
           cd ../..
@@ -67,6 +66,33 @@ jobs:
           EOF
           python3 patch_lcd.py
 
+      - name: Patch ext_mod/lvgl/micropython.cmake Syntax
+        run: |
+          cat << 'EOF' > patch_lvgl_cmake.py
+          import os, re
+
+          cmake_file = 'ext_mod/lvgl/micropython.cmake'
+          if os.path.exists(cmake_file):
+              with open(cmake_file, 'r') as f:
+                  lines = f.readlines()
+
+              print("Original line 30 area:")
+              for idx in range(max(0, 25), min(len(lines), 35)):
+                  print(f"{idx+1}: {lines[idx]}", end="")
+
+              new_lines = []
+              for line in lines:
+                  # Fix unquoted ${VAR} EQUAL 0 to "${VAR}" STREQUAL "0"
+                  # Handles: if (${VAR} EQUAL 0) or if(${VAR} EQUAL 0)
+                  fixed = re.sub(r'if\s*\(\s*\$\{([A-Za-z0-9_]+)\}\s+EQUAL\s+([0-9]+)\s*\)', r'if("\${\1}" STREQUAL "\2")', line)
+                  new_lines.append(fixed)
+
+              with open(cmake_file, 'w') as f:
+                  f.writelines(new_lines)
+              print("\nPatched ext_mod/lvgl/micropython.cmake successfully.")
+          EOF
+          python3 patch_lvgl_cmake.py
+
       - name: Precompile mpy-cross
         run: |
           cd lib/micropython/mpy-cross
@@ -85,8 +111,7 @@ jobs:
           fi
 
           cmake -B build-RPI_PICO2_W -S . -G Ninja \
-            -DPICO_BOARD=RPI_PICO2_W \
-            -DMICROPY_BOARD=RPI_PICO2_W \
+            -DBOARD=RPI_PICO2_W \
             -DPICO_SDK_PATH=$PWD/../../lib/pico-sdk \
             -DPIOASM_EXECUTABLE=/usr/local/bin/pioasm \
             -DPICOTOOL_EXECUTABLE=/usr/local/bin/picotool \
