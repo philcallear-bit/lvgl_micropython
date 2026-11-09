@@ -1,1 +1,35 @@
+name: Build Pico 2 W LVGL v9 (B)
 
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          submodules: recursive
+
+      - name: Inspect Workspace, Submodules, and CMake Generator Logic
+        run: |
+          echo "=== Top-level Directory Structure ==="
+          ls -la
+
+          echo -e "\n=== Git Submodule Configuration (.gitmodules) ==="
+          if [ -f .gitmodules ]; then
+            cat .gitmodules
+          else
+            echo "No .gitmodules file found."
+          fi
+
+          echo -e "\n=== Searching for generator scripts (*gen*.py) ==="
+          find . -name "*gen*.py" || true
+
+          echo -e "\n=== Contents of ext_mod/lvgl/micropython.cmake around line 30-55 ==="
+          if [ -f ext_mod/lvgl/micropython.cmake ]; then
+            nl -ba ext_mod/lvgl/micropython.cmake | sed -n '25,60p'
+          fi
