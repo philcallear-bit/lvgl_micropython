@@ -171,14 +171,7 @@ jobs:
           if os.path.exists(rp2_cmake):
               with open(rp2_cmake, 'r') as f:
                   content = f.read()
-              shim = '''
-if(NOT COMMAND pico_add_linker_script_override_path)
-    macro(pico_add_linker_script_override_path TARGET PATH)
-        target_link_directories(${TARGET} PRIVATE ${PATH})
-        target_link_options(${TARGET} PRIVATE "-L${PATH}")
-    endmacro()
-endif()
-'''
+              shim = '\nif(NOT COMMAND pico_add_linker_script_override_path)\n    macro(pico_add_linker_script_override_path TARGET PATH)\n        target_link_directories(${TARGET} PRIVATE ${PATH})\n        target_link_options(${TARGET} PRIVATE "-L${PATH}")\n    endmacro()\nendif()\n'
               if 'pico_add_linker_script_override_path' not in content[:400]:
                   content = shim + '\n' + content
                   with open(rp2_cmake, 'w') as f:
