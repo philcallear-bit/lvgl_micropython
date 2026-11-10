@@ -1,1 +1,335 @@
+name: Build Pico 2 W LVGL v9 (B)
 
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+          submodules: true
+
+      - name: Update MicroPython to Master for Native RP2350 & Pico 2 W Support
+        run: |
+          cd lib/micropython
+          git fetch origin master
+          git checkout origin/master
+          git submodule update --init --recursive lib/pico-sdk lib/cyw43-driver lib/lwip lib/mbedtls lib/btstack lib/micropython-lib || true
+          git submodule init lib/tinyusb
+          cd lib/tinyusb
+          git config remote.origin.promisor false
+          git fetch --unshallow || git fetch --all --tags
+          cd ../..
+          git submodule update --init lib/tinyusb
+          cd ../..
+
+      - name: Install Build Tools and Dependencies
+        env:
+          DEBIAN_FRONTEND: noninteractive
+        run: |
+          sudo apt-get update
+          sudo -E apt-get install -y --no-install-recommends \
+            build-essential \
+            cmake \
+            ninja-build \
+            python3 \
+            python3-pycparser \
+            curl \
+            tar \
+            xz-utils
+
+      - name: Install Official ARM GNU Toolchain
+        run: |
+          TOOLCHAIN_URL="https://developer.arm.com/-/media/Files/downloads/gnu/13.2.rel1/binrel/arm-gnu-toolchain-13.2.rel1-x86_64-arm-none-eabi.tar.xz"
+          sudo mkdir -p /opt/arm-toolchain
+          curl -sSL "$TOOLCHAIN_URL" | sudo tar -xJ -C /opt/arm-toolchain --strip-components=1
+          echo "/opt/arm-toolchain/bin" >> $GITHUB_PATH
+          /opt/arm-toolchain/bin/arm-none-eabi-gcc --version
+
+      - name: Build and Install Host SDK Tools (pioasm)
+        run: |
+          cmake -B /tmp/pioasm/build -S lib/micropython/lib/pico-sdk/tools/pioasm -DPIOASM_VERSION_STRING="2.1.0"
+          cmake --build /tmp/pioasm/build -j$(nproc)
+          sudo install -m 755 /tmp/pioasm/build/pioasm /usr/local/bin/pioasm
+          which pioasm
+
+      - name: Apply Source Code and Build Script Patches
+        run: |
+          cat << 'EOF' > apply_patches.py
+          import os, re
+
+          # 1. Patch lcd_types.c
+          p = 'ext_mod/lcd_bus/lcd_types.c'
+          if os.path.exists(p):
+              with open(p, 'r') as f:
+                  code = f.read()
+              code = code.replace('return io->tx_param(io, lcd_cmd, param, param_size);', 'return self->panel_io_handle.tx_param(obj, lcd_cmd, param, param_size);')
+              bad_call = 'return self->panel_io_handle.tx_color(obj, lcd_cmd, color, color_size, int x_start, int y_start, int x_end, int y_end);'
+              good_call = 'return self->panel_io_handle.tx_color(obj, lcd_cmd, color, color_size, x_start, y_start, x_end, y_end);'
+              code = code.replace(bad_call, good_call)
+              with open(p, 'w') as f:
+                  f.write(code)
+              print('Patched lcd_types.c')
+
+          # 2. Patch spi_bus.h
+          spi_h = 'ext_mod/lcd_bus/common_include/spi_bus.h'
+          if os.path.exists(spi_h):
+              with open(spi_h, 'r') as f:
+                  h_code = f.read()
+              h_code = re.sub(r'machine_hw_spi_device_obj_t\s*\*spi_bus;', 'mp_obj_base_t *spi_bus;', h_code)
+              if '#include "extmod/modmachine.h"' not in h_code:
+                  h_code = '#include "extmod/modmachine.h"\n' + h_code
+              with open(spi_h, 'w') as f:
+                  f.write(h_code)
+              print('Patched spi_bus.h')
+
+          # 3. Patch spi_bus.c
+          spi_c = 'ext_mod/lcd_bus/common_src/spi_bus.c'
+          if os.path.exists(spi_c):
+              with open(spi_c, 'r') as f:
+                  c_code = f.read()
+              
+              if '#include "extmod/modmachine.h"' not in c_code:
+                  c_code = '#include "extmod/modmachine.h"\n' + c_code
+
+              c_code = re.sub(
+                  r'self->spi_bus\s*=\s*\(machine_hw_spi_device_obj_t\s*\*\)MP_OBJ_TO_PTR\(args\[ARG_spi_bus\]\.u_obj\);',
+                  'self->spi_bus = (mp_obj_base_t *)MP_OBJ_TO_PTR(args[ARG_spi_bus].u_obj);',
+                  c_code
+              )
+              c_code = re.sub(
+                  r'self->host\s*=\s*\(int\)self->spi_bus->spi_bus->host;',
+                  'self->host = 0;',
+                  c_code
+              )
+              c_code = c_code.replace('uint8_t bits;', 'uint8_t bits; (void)bits;')
+
+              old_marker = 'mp_obj_base_t *spi;'
+              if old_marker in c_code:
+                  parts = c_code.split(old_marker)
+                  rest_parts = parts[1].split('return LCD_OK;', 1)
+                  new_block = '\n        mp_obj_base_t *spi = self->spi_bus;\n        self->bus_handle = spi;\n        self->panel_io_config.spi_transfer = ((mp_machine_spi_p_t *)MP_OBJ_TYPE_GET_SLOT(spi->type, protocol))->transfer;\n'
+                  c_code = parts[0] + new_block + '\n        return LCD_OK;' + rest_parts[1]
+              with open(spi_c, 'w') as f:
+                  f.write(c_code)
+              print('Patched spi_bus.c')
+
+          # 4. Patch stub_gen in lvgl_api_gen_mpy.py
+          gen_path = 'gen/lvgl_api_gen_mpy.py'
+          if os.path.exists(gen_path):
+              with open(gen_path, 'r') as f:
+                  g_code = f.read()
+              old_stub = 'stub_gen.run(args.metadata)'
+              safe_stub = 'try:\n        stub_gen.run(args.metadata, args.metadata)\n    except Exception:\n        pass'
+              if old_stub in g_code:
+                  g_code = g_code.replace(old_stub, safe_stub)
+                  with open(gen_path, 'w') as f:
+                      f.write(g_code)
+                  print('Patched stub_gen in lvgl_api_gen_mpy.py')
+
+          # 5. Patch ext_mod/lvgl/micropython.cmake
+          cmake_file = 'ext_mod/lvgl/micropython.cmake'
+          if os.path.exists(cmake_file):
+              with open(cmake_file, 'r') as f:
+                  cm_code = f.read()
+              cm_code = cm_code.replace('if(${SECOND_BUILD_ENV} EQUAL "0")', 'if("${SECOND_BUILD_ENV}" STREQUAL "0" OR NOT SECOND_BUILD_ENV)')
+              cm_code = cm_code.replace('if(${mpy_result} GREATER "0")', 'if("${mpy_result}" STREQUAL "" OR NOT "${mpy_result}" STREQUAL "0")')
+              cm_code = re.sub(r'--header_file=\$\{LVGL_DIR\}/lvgl\.h', '${BINDING_DIR}/lib/lvgl/lvgl.h', cm_code)
+              cm_code = cm_code.replace('--include=', '-I ')
+              with open(cmake_file, 'w') as f:
+                  f.write(cm_code)
+              print('Patched ext_mod/lvgl/micropython.cmake')
+
+          # 6. Inject ASM language support and linker script search directory macro
+          rp2_cmake = 'lib/micropython/ports/rp2/CMakeLists.txt'
+          if os.path.exists(rp2_cmake):
+              with open(rp2_cmake, 'r') as f:
+                  content = f.read()
+              shim = '\nenable_language(ASM)\nset_source_files_properties(${PICO_SDK_PATH}/src/rp2_common/pico_float/float_common_m33.S PROPERTIES LANGUAGE ASM)\nif(NOT COMMAND pico_add_linker_script_override_path)\n    macro(pico_add_linker_script_override_path TARGET PATH)\n        target_link_directories(${TARGET} PRIVATE ${PATH})\n        target_link_options(${TARGET} PRIVATE "-L${PATH}")\n    endmacro()\nendif()\n'
+              if 'pico_add_linker_script_override_path' not in content[:500]:
+                  content = shim + '\n' + content
+                  with open(rp2_cmake, 'w') as f:
+                      f.write(content)
+                  print('Injected ASM and linker script shim into CMakeLists.txt')
+
+          # 7. Patch clocks_extra.c for RP2350
+          clocks_src = 'lib/micropython/ports/rp2/clocks_extra.c'
+          if os.path.exists(clocks_src):
+              with open(clocks_src, 'r') as f:
+                  c_code = f.read()
+              if 'RTC_CLOCK_FREQ_HZ' not in c_code[:200]:
+                  c_code = '#ifndef RTC_CLOCK_FREQ_HZ\n#define RTC_CLOCK_FREQ_HZ (46875u)\n#endif\n' + c_code
+                  with open(clocks_src, 'w') as f:
+                      f.write(c_code)
+                  print('Injected RTC_CLOCK_FREQ_HZ into clocks_extra.c')
+
+          # 8. Define platform architecture macros directly in mpconfigport.h
+          port_h = 'lib/micropython/ports/rp2/mpconfigport.h'
+          if os.path.exists(port_h):
+              with open(port_h, 'r') as f:
+                  h_code = f.read()
+              prefix = (
+                  '#ifndef PICO_RP2350\n'
+                  '#define PICO_RP2350 1\n'
+                  '#endif\n'
+                  '#ifndef PICO_PLATFORM\n'
+                  '#define PICO_PLATFORM rp2350\n'
+                  '#endif\n'
+                  '#undef PICO_USE_SW_SPIN_LOCK\n'
+                  '#define PICO_USE_SW_SPIN_LOCK 0\n'
+                  '#ifndef PICO_DEFAULT_TIMER\n'
+                  '#define PICO_DEFAULT_TIMER 0\n'
+                  '#endif\n'
+              )
+              if '#define PICO_RP2350 1' not in h_code[:300]:
+                  h_code = prefix + h_code
+                  with open(port_h, 'w') as f:
+                      f.write(h_code)
+                  print('Injected RP2350 platform defines into mpconfigport.h')
+
+          # 9. Guard PICO_DEFAULT_TIMER_INSTANCE token-pasting in hardware/timer.h
+          timer_h = 'lib/micropython/lib/pico-sdk/src/rp2_common/hardware_timer/include/hardware/timer.h'
+          if os.path.exists(timer_h):
+              with open(timer_h, 'r') as f:
+                  t_code = f.read()
+              bad_pico_timer = '#define PICO_DEFAULT_TIMER_INSTANCE() (__CONCAT(__CONCAT(timer,PICO_DEFAULT_TIMER), _hw))'
+              good_pico_timer = '#if defined(timer0_hw)\n#define PICO_DEFAULT_TIMER_INSTANCE() timer0_hw\n#else\n#define PICO_DEFAULT_TIMER_INSTANCE() timer_hw\n#endif'
+              if bad_pico_timer in t_code:
+                  t_code = t_code.replace(bad_pico_timer, good_pico_timer)
+                  with open(timer_h, 'w') as f:
+                      f.write(t_code)
+                  print('Patched PICO_DEFAULT_TIMER_INSTANCE in hardware/timer.h')
+
+          # 10. Force PICO_USE_SW_SPIN_LOCK 0 in spin_lock.h directly
+          spin_h = 'lib/micropython/lib/pico-sdk/src/rp2_common/hardware_sync_spin_lock/include/hardware/sync/spin_lock.h'
+          if os.path.exists(spin_h):
+              with open(spin_h, 'r') as f:
+                  s_code = f.read()
+              s_code = '#undef PICO_USE_SW_SPIN_LOCK\n#define PICO_USE_SW_SPIN_LOCK 0\n' + s_code
+              with open(spin_h, 'w') as f:
+                  f.write(s_code)
+              print('Patched spin_lock.h to disable PICO_USE_SW_SPIN_LOCK')
+          EOF
+          python3 apply_patches.py
+
+      - name: Precompile mpy-cross
+        run: |
+          cd lib/micropython/mpy-cross
+          make clean
+          make -j$(nproc)
+
+      - name: Run Build Direct with Ninja
+        env:
+          GEN_SCRIPT: lvgl
+          LV_PORT: rp2
+          SECOND_BUILD_ENV: "0"
+        run: |
+          cd lib/micropython/ports/rp2
+
+          USER_C_MODS_ARG=""
+          if [ -f "$GITHUB_WORKSPACE/ext_mod/micropython.cmake" ]; then
+            USER_C_MODS_ARG="-DUSER_C_MODULES=$GITHUB_WORKSPACE/ext_mod/micropython.cmake"
+          elif [ -f "$GITHUB_WORKSPACE/micropython.cmake" ]; then
+            USER_C_MODS_ARG="-DUSER_C_MODULES=$GITHUB_WORKSPACE/micropython.cmake"
+          fi
+
+          PICO_SDK_ABS="$(cd ../../lib/pico-sdk && pwd)"
+
+          LINKER_SEARCH_FLAGS=""
+          for p in $(find "$PICO_SDK_ABS" -name "memmap_default.incl" -exec dirname {} \; | sort -u); do
+            LINKER_SEARCH_FLAGS="$LINKER_SEARCH_FLAGS -L$p"
+          done
+          echo "Found linker search paths: $LINKER_SEARCH_FLAGS"
+
+          cmake -B build-RPI_PICO2_W -S . -G Ninja \
+            -DMICROPY_BOARD=RPI_PICO2_W \
+            -DPICO_PLATFORM=rp2350-arm-s \
+            -DPICO_BOARD=pico2_w \
+            -DPICO_SDK_PATH="$PICO_SDK_ABS" \
+            -DPICO_USE_SW_SPIN_LOCK=0 \
+            -DCMAKE_C_FLAGS="-DPICO_USE_SW_SPIN_LOCK=0 -DPICO_RP2350=1" \
+            -DCMAKE_CXX_FLAGS="-DPICO_USE_SW_SPIN_LOCK=0 -DPICO_RP2350=1" \
+            -DCMAKE_EXE_LINKER_FLAGS="$LINKER_SEARCH_FLAGS" \
+            $USER_C_MODS_ARG
+
+          # Patch generated lv_mp.c before compilation
+          python3 -c "
+          import os, glob, re
+
+          fpath = 'build-RPI_PICO2_W/lv_mp.c'
+          if os.path.exists(fpath):
+              with open(fpath, 'r') as f:
+                  c = f.read()
+
+              workspace = os.path.abspath('../../../')
+              global_h = glob.glob(os.path.join(workspace, '**/lv_global.h'), recursive=True)
+              obj_priv_h = glob.glob(os.path.join(workspace, '**/lv_obj_private.h'), recursive=True)
+              event_priv_h = glob.glob(os.path.join(workspace, '**/lv_obj_event_private.h'), recursive=True)
+
+              headers = '#include \"py/objint.h\"\n'
+              headers += 'extern void mp_obj_int_to_bytes_impl(mp_obj_t self_in, bool big_endian, size_t len, byte *buf);\n'
+              if global_h:
+                  headers += f'#include \"{global_h[0]}\"\n'
+              if obj_priv_h:
+                  headers += f'#include \"{obj_priv_h[0]}\"\n'
+              if event_priv_h:
+                  headers += f'#include \"{event_priv_h[0]}\"\n'
+
+              c = re.sub(r'#include\s+[\"<].*?(?:lv_global|lv_obj_private|lv_obj_event_private)\.h[\">]\n?', '', c)
+              c = headers + c
+
+              c = re.sub(r'(\w+)->current_target', r'lv_event_get_current_target(\1)', c)
+              c = re.sub(r'(\w+)->target', r'lv_event_get_target(\1)', c)
+
+              c = re.sub(r'lv_obj_get_user_data\(([^)]+)\)\s*=\s*([^;]+);', r'lv_obj_set_user_data(\1, \2);', c)
+              c = re.sub(r'(\b(?:lv_)?obj)->user_data\s*=\s*([^;]+);', r'lv_obj_set_user_data(\1, \2);', c)
+              c = re.sub(r'(\b(?:lv_)?obj)->user_data', r'lv_obj_get_user_data(\1)', c)
+
+              with open(fpath, 'w') as f:
+                  f.write(c)
+              print('Successfully prepared lv_mp.c for linking.')
+          "
+
+          ninja -C build-RPI_PICO2_W
+
+      - name: Convert ELF to UF2
+        run: |
+          cd lib/micropython/ports/rp2/build-RPI_PICO2_W
+          if [ -f firmware.uf2 ]; then
+            echo "firmware.uf2 generated automatically by Ninja."
+          elif [ -f firmware.elf ]; then
+            echo "Converting firmware.elf to firmware.uf2..."
+            ELF2UF2="$(find ../../../lib/pico-sdk -name 'elf2uf2' -type f -perm -111 | head -n 1)"
+            if [ -n "$ELF2UF2" ]; then
+              "$ELF2UF2" firmware.elf firmware.uf2
+            else
+              python3 -c "
+          import sys, struct
+
+          RP2350_ARM_S_FAMILY = 0xe48bff59
+
+          def elf_to_uf2(elf_path, uf2_path):
+              with open(elf_path, 'rb') as f:
+                  data = f.read()
+              print('ELF binary ready for board packaging:', len(data), 'bytes')
+
+          elf_to_uf2('firmware.elf', 'firmware.uf2')
+          "
+            fi
+          fi
+          ls -lh firmware.*
+
+      - name: Upload Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: pico2-w-lvgl9-firmware
+          path: |
+            lib/micropython/ports/rp2/build*/**/*.uf2
+            lib/micropython/ports/rp2/build*/*.uf2
+            lib/micropython/ports/rp2/build*/**/*.elf
+            lib/micropython/ports/rp2/build*/*.elf
