@@ -5,7 +5,7 @@ on:
 
 jobs:
   build-uf2:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - name: Checkout upstream lvgl_micropython
         uses: actions/checkout@v4
@@ -13,34 +13,8 @@ jobs:
           repository: lvgl-micropython/lvgl_micropython
           ref: main
 
-      - name: Setup Python 3.11
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.11'
-
-      - name: Install build dependencies and submodules
+      - name: Inspect make.py rp2 options and GEN_SCRIPT
         run: |
-          sudo apt-get update
-          sudo apt-get install -y \
-            build-essential \
-            cmake \
-            ninja-build \
-            git \
-            gcc-arm-none-eabi \
-            libnewlib-arm-none-eabi \
-            libstdc++-arm-none-eabi-newlib \
-            doxygen
-          git submodule update --init --depth 1 -- lib/pycparser
-          git submodule update --init --depth 1 --jobs 4 -- lib/micropython
-          git submodule update --init --depth 1 --jobs 4 -- lib/lvgl
-
-      - name: Build RPI_PICO2_W firmware
-        env:
-          Python3_ROOT_DIR: ${{ env.pythonLocation }}
-        run: python3 make.py rp2 BOARD=RPI_PICO2_W DISPLAY=ili9341 INDEV=xpt2046
-
-      - name: Upload firmware.uf2 artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: pico2w-lvgl9-v2-firmware
-          path: build/lvgl_micropy_RPI_PICO2_W-*.uf2
+          python3 make.py rp2 --help || true
+          grep -rn "GEN_SCRIPT" make.py builder/ ext_mod/ || true
+          cat builder/rp2.py || true
