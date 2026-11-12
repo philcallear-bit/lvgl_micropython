@@ -7,8 +7,11 @@ jobs:
   build-uf2:
     runs-on: ubuntu-24.04
     steps:
-      - name: Checkout repository
+      - name: Checkout upstream lvgl_micropython
         uses: actions/checkout@v4
+        with:
+          repository: lvgl-micropython/lvgl_micropython
+          ref: main
 
       - name: Install build dependencies
         run: |
@@ -26,9 +29,6 @@ jobs:
             libnewlib-arm-none-eabi \
             libstdc++-arm-none-eabi-newlib \
             doxygen
-
-      - name: Verify generator script exists
-        run: ls -la gen/_api_gen_mpy.py
 
       - name: Build RPI_PICO2_W firmware
         run: python3 make.py rp2 BOARD=RPI_PICO2_W DISPLAY=ili9341 INDEV=xpt2046
