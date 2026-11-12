@@ -13,7 +13,7 @@ jobs:
           repository: lvgl-micropython/lvgl_micropython
           ref: main
 
-      - name: Align RP2 SPI definitions with mp_spi_common.h
+      - name: Align RP2 SPI definitions across rp2 and lcd_bus
         run: |
           sed -i \
             -e 's/machine_hw_spi_obj_t/mp_machine_hw_spi_device_obj_t/g' \
@@ -25,7 +25,11 @@ jobs:
             -e 's/->active_devices/->device_count/g' \
             -e 's/self->baudrate/self->freq/g' \
             micropy_updates/rp2/machine_spi.c
-          sed -i 's|#endif /\* __MP_SPI_COMMON_H__ \*/|    typedef mp_machine_hw_spi_device_obj_t machine_hw_spi_device_obj_t;\n#endif /* __MP_SPI_COMMON_H__ */|' \
+          sed -i \
+            -e 's/->mosi/->data0/g' \
+            -e 's/->miso/->data1/g' \
+            ext_mod/lcd_bus/common_src/spi_bus.c
+          sed -i 's|#endif /\* __MP_SPI_COMMON_H__ \*/|    typedef mp_machine_hw_spi_device_obj_t machine_hw_spi_device_obj_t;\n    extern const mp_obj_type_t machine_spi_type;\n#endif /* __MP_SPI_COMMON_H__ */|' \
             micropy_updates/common/mp_spi_common.h
 
       - name: Install build dependencies
