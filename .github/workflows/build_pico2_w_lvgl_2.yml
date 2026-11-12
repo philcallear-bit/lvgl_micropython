@@ -12,8 +12,9 @@ jobs:
         with:
           repository: lvgl-micropython/lvgl_micropython
           ref: main
+          fetch-depth: 0
 
-      - name: Inspect mp_spi_common.h and references
+      - name: Inspect mp_spi_common.h history and rp2 machine_spi.c
         run: |
-          cat micropy_updates/common/mp_spi_common.h
-          grep -rn "mp_spi_common\|micropy_updates" make.py builder/ micropy_updates/
+          git log -n 10 --oneline -- micropy_updates/common/mp_spi_common.h micropy_updates/rp2/machine_spi.c
+          cat micropy_updates/rp2/machine_spi.c
