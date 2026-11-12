@@ -13,9 +13,7 @@ jobs:
           repository: lvgl-micropython/lvgl_micropython
           ref: main
 
-      - name: Inspect machine_spi.h vs micropy_updates/rp2/machine_spi.c
+      - name: Inspect mp_spi_common.h and references
         run: |
-          git submodule update --init lib/micropython
-          ls -la micropy_updates/rp2/
-          head -n 45 micropy_updates/rp2/machine_spi.c
-          cat lib/micropython/extmod/machine_spi.h
+          cat micropy_updates/common/mp_spi_common.h
+          grep -rn "mp_spi_common\|micropy_updates" make.py builder/ micropy_updates/
