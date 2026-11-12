@@ -36,7 +36,7 @@ jobs:
 
       - name: Build RPI_PICO2_W firmware
         env:
-          GEN_SCRIPT: lvgl
+          GEN_SCRIPT: python
         run: python3 make.py rp2 submodules clean mpy_cross BOARD=RPI_PICO2_W DISPLAY=ili9341 INDEV=xpt2046
 
       - name: Upload firmware.uf2 artifact
