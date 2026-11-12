@@ -13,38 +13,9 @@ jobs:
           repository: lvgl-micropython/lvgl_micropython
           ref: main
 
-      - name: Pin and commit lib/micropython at v1.26.1
+      - name: Inspect machine_spi.h vs micropy_updates/rp2/machine_spi.c
         run: |
           git submodule update --init lib/micropython
-          git -C lib/micropython fetch --tags --depth 1 origin refs/tags/v1.26.1:refs/tags/v1.26.1
-          git -C lib/micropython checkout v1.26.1
-          git add lib/micropython
-          git -c user.name="ci" -c user.email="ci@local" commit -m "Pin micropython to v1.26.1"
-
-      - name: Install build dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y \
-            build-essential \
-            cmake \
-            ninja-build \
-            git \
-            python3 \
-            python3-venv \
-            python3-pip \
-            python3-pycparser \
-            gcc-arm-none-eabi \
-            libnewlib-arm-none-eabi \
-            libstdc++-arm-none-eabi-newlib \
-            doxygen
-
-      - name: Build RPI_PICO2_W firmware
-        env:
-          GEN_SCRIPT: python
-        run: python3 make.py rp2 BOARD=RPI_PICO2_W DISPLAY=ili9341 INDEV=xpt2046
-
-      - name: Upload firmware.uf2 artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: pico2w-lvgl9-v2-firmware
-          path: build/lvgl_micropy_RPI_PICO2_W.uf2
+          ls -la micropy_updates/rp2/
+          head -n 45 micropy_updates/rp2/machine_spi.c
+          cat lib/micropython/extmod/machine_spi.h
