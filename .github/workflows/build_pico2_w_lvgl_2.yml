@@ -13,7 +13,7 @@ jobs:
           repository: lvgl-micropython/lvgl_micropython
           ref: main
 
-      - name: Align micropy_updates/rp2/machine_spi.c with mp_spi_common.h
+      - name: Align RP2 SPI definitions with mp_spi_common.h
         run: |
           sed -i \
             -e 's/machine_hw_spi_obj_t/mp_machine_hw_spi_device_obj_t/g' \
@@ -25,6 +25,8 @@ jobs:
             -e 's/->active_devices/->device_count/g' \
             -e 's/self->baudrate/self->freq/g' \
             micropy_updates/rp2/machine_spi.c
+          sed -i 's|#endif /\* __MP_SPI_COMMON_H__ \*/|    typedef mp_machine_hw_spi_device_obj_t machine_hw_spi_device_obj_t;\n#endif /* __MP_SPI_COMMON_H__ */|' \
+            micropy_updates/common/mp_spi_common.h
 
       - name: Install build dependencies
         run: |
