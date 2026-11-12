@@ -29,6 +29,8 @@ jobs:
             -e 's/->mosi/->data0/g' \
             -e 's/->miso/->data1/g' \
             ext_mod/lcd_bus/common_src/spi_bus.c
+          sed -i 's|#include "py/runtime.h"|#include "py/runtime.h"\n#include "extmod/modmachine.h"|' \
+            micropy_updates/common/mp_spi_common.h
           sed -i 's|#endif /\* __MP_SPI_COMMON_H__ \*/|    typedef mp_machine_hw_spi_device_obj_t machine_hw_spi_device_obj_t;\n    extern const mp_obj_type_t machine_spi_type;\n#endif /* __MP_SPI_COMMON_H__ */|' \
             micropy_updates/common/mp_spi_common.h
 
