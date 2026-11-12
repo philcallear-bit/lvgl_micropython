@@ -5,7 +5,7 @@ on:
 
 jobs:
   build-uf2:
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-latest
     steps:
       - name: Checkout upstream lvgl_micropython
         uses: actions/checkout@v4
@@ -30,14 +30,14 @@ jobs:
             libnewlib-arm-none-eabi \
             libstdc++-arm-none-eabi-newlib \
             doxygen
-          git submodule update --init -- lib/pycparser
-          git submodule update --init --jobs 4 -- lib/micropython
-          git submodule update --init --jobs 4 -- lib/lvgl
+          git submodule update --init --depth 1 -- lib/pycparser
+          git submodule update --init --depth 1 --jobs 4 -- lib/micropython
+          git submodule update --init --depth 1 --jobs 4 -- lib/lvgl
 
       - name: Build RPI_PICO2_W firmware
         env:
-          GEN_SCRIPT: python
-        run: python3 make.py rp2 submodules clean mpy_cross BOARD=RPI_PICO2_W DISPLAY=ili9341 INDEV=xpt2046
+          Python3_ROOT_DIR: ${{ env.pythonLocation }}
+        run: python3 make.py rp2 BOARD=RPI_PICO2_W DISPLAY=ili9341 INDEV=xpt2046
 
       - name: Upload firmware.uf2 artifact
         uses: actions/upload-artifact@v4
