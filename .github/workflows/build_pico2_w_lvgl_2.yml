@@ -13,11 +13,13 @@ jobs:
           repository: lvgl-micropython/lvgl_micropython
           ref: main
 
-      - name: Pin lib/micropython to v1.26.1 (pre-1.27.0 SPI refactor)
+      - name: Pin and commit lib/micropython at v1.26.1
         run: |
           git submodule update --init lib/micropython
           git -C lib/micropython fetch --tags --depth 1 origin refs/tags/v1.26.1:refs/tags/v1.26.1
           git -C lib/micropython checkout v1.26.1
+          git add lib/micropython
+          git -c user.name="ci" -c user.email="ci@local" commit -m "Pin micropython to v1.26.1"
 
       - name: Install build dependencies
         run: |
